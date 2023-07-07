@@ -1,3 +1,4 @@
+# Import necessary libraries
 import os
 import shutil
 import numpy as np
@@ -11,6 +12,8 @@ from pdfminer.pdfparser import PDFParser
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.cluster import AgglomerativeClustering
+from sklearn.decomposition import PCA
+import matplotlib.pyplot as plt
 
 class Spider:
     def __init__(self, position):
@@ -81,23 +84,48 @@ X = vectorizer.fit_transform(documents)
 
 # Run Social Spider Optimization algorithm
 ssa = SocialSpiderOptimization(X.toarray(), num_clusters=3, Nf=10, Nm=10, iterations=100, alpha=0.3, beta=0.3)
-ssa.run_optimization()
+best_solution = ssa.run_optimization()
+
+# Run initial clustering
+initial_clusters = {}
+initial_labels = []
+for doc_text in documents:
+    doc_tfidf = vectorizer.transform([doc_text]).toarray()[0]
+    similarities = cosine_similarity(doc_tfidf.reshape(1, -1), best_solution)
+    cluster_index = np.argmax(similarities)
+    initial_labels.append(cluster_index)
+    if cluster_index in initial_clusters:
+        initial_clusters[cluster_index].append(doc_text)
+    else:
+        initial_clusters[cluster_index] = [doc_text]
+
+# Plot initial clustering
+pca = PCA(n_components=2)
+projected = pca.fit_transform(X.toarray())
+plt.scatter(projected[:, 0], projected[:, 1], c=initial_labels)
+plt.title('Initial Clustering with Social Spider Optimization')
+plt.show()
 
 # Run agglomerative clustering algorithm using cosine similarity
 clustering = AgglomerativeClustering(n_clusters=3, affinity='cosine', linkage='complete')
 clustering.fit(X.toarray())
 
 # Cluster documents
-clusters = {}
+final_clusters = {}
 for i, doc_text in enumerate(documents):
     cluster_index = clustering.labels_[i]
-    if cluster_index in clusters:
-        clusters[cluster_index].append(doc_text)
+    if cluster_index in final_clusters:
+        final_clusters[cluster_index].append(doc_text)
     else:
-        clusters[cluster_index] = [doc_text]
+        final_clusters[cluster_index] = [doc_text]
+
+# Plot final clustering
+plt.scatter(projected[:, 0], projected[:, 1], c=clustering.labels_)
+plt.title('Final Clustering with Agglomerative Clustering')
+plt.show()
 
 # Move documents to corresponding folders
-for cluster_index, cluster in clusters.items():
+for cluster_index, cluster in final_clusters.items():
     cluster_dir = os.path.join(input_dir, f'cluster_{cluster_index}')
     if not os.path.exists(cluster_dir):
         os.makedirs(cluster_dir)
